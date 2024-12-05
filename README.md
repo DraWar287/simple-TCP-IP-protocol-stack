@@ -8,7 +8,7 @@ A simple implementation of the TCP/IP protocol stack.
 ├── README.md
 ├── src
 │   ├── main.rs
-│   ├── net
+│   ├── link
 │   │   ├── ethernet.rs
 │   │   └── mod.rs
 │   └── transport
