@@ -1,3 +1,5 @@
+use crate::utils::checksum;
+
 #[derive(Debug)]
 pub struct Ipv4Datagram {
     version: u8, // 4bits
@@ -28,27 +30,6 @@ impl Ipv4Datagram {
        return new_ins;
     }
 
-    fn generate_checksum(bytes: &Vec<u8>) -> u16{
-        let mut checksum = 0;
-
-        if bytes.len() & 1 == 1 {
-            panic!("Ethernet header with odd length!");
-        }
-
-        for i in (0..bytes.len()).step_by(2) {
-            checksum += ((bytes[i] as u32) << 8) + (bytes[i + 1] as u32);
-            
-            if checksum & 0xffff0000 != 0 { // 处理溢出
-                checksum = (checksum & 0x0000ffff) + (checksum >> 16);
-            }
-        }
-        
-        checksum as u16
-    }
-
-    pub fn check(bytes: &Vec<u8>) -> bool {
-        Self::generate_checksum(bytes) == 0
-    }
 
     pub fn deserialize(bytes:Vec<u8>) -> Ipv4Datagram{
         if bytes.len() < 20 { // IPv4头部的最小长度为20字节
@@ -77,9 +58,10 @@ impl Ipv4Datagram {
     fn generate_hdr_checksum(&mut self) -> u16 {
         self.hdr_checksum = 0;
         let serialized_hdr = self.serialized_hdr();
-        let checksum =  Self::generate_checksum(&serialized_hdr);
-        self.hdr_checksum = !(checksum as u16);
-        !(checksum as u16)
+        let checksum =  checksum::generate_checksum(&serialized_hdr);
+        self.hdr_checksum = checksum;
+        
+        checksum
     }
 
     pub fn serialized_hdr(&self) -> Vec<u8> {
@@ -141,8 +123,8 @@ mod tests {
             0x50, 0x00, 0xb0, 0x3c, 0x50, 0x00, 0xb0, 0x3c,0x50, 0x00, 0xb0, 0x3c,0x50, 0x00, 0xb0, 0x3c,0x50, 0x00, 0xb0, 0x3c,
         ];
 
-        let checksum = Ipv4Datagram::generate_checksum(&bytes);
-        assert_eq!(checksum, 0x0131); // 预期的校验和
+        let checksum = checksum::generate_checksum(&bytes);
+        assert_eq!(checksum, 0xFECE); // 预期的校验和
     }
 
 }
