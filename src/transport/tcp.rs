@@ -1,11 +1,11 @@
-
-use std::result;
-
 use crate::utils::checksum;
 use crate::utils::trans_bytes;
 
+/**
+ * TCP报文段
+ */
 #[derive(Debug)]
-struct TcpSegment {
+pub struct TcpSegment {
     s_port: u16, d_port: u16,
     seq: u32,
     ack: u32,
@@ -57,6 +57,8 @@ impl TcpSegment {
     }
 
 }
+
+
 
 
 #[cfg(test)]
