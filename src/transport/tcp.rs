@@ -9,14 +9,14 @@ struct TcpSegment {
     s_port: u16, d_port: u16,
     seq: u32,
     ack: u32,
-    hl: u8/* 长度4bits, 单位32bits*/, rcvd: u8/* 长度4bits*/, ctrl: u8, win_size: u16,
+    hl: u8/* 长度4bits, 单位32bits*/, rcvd: u8/* 长度3bits*/, ctrl: u16, win_size: u16,
     checksum: u16, ur_ptr: u16,
     options: Vec<u32>,
     data: Vec<u8> 
 }
 
 impl TcpSegment {
-    pub fn new(s_port: u16, d_port: u16, seq: u32, ack: u32, hl: u8, rcvd: u8, ctrl: u8, win_size: u16, ur_ptr: u16, options: Vec<u32>, data: Vec<u8> ) -> Self {
+    pub fn new(s_port: u16, d_port: u16, seq: u32, ack: u32, hl: u8, rcvd: u8, ctrl: u16, win_size: u16, ur_ptr: u16, options: Vec<u32>, data: Vec<u8> ) -> Self {
         let mut new_ins = TcpSegment {s_port, d_port, seq, ack, hl, rcvd, ctrl, win_size, ur_ptr, options, data, checksum: 0 };
         new_ins.checksum = checksum::generate_checksum(&new_ins.serialized_hdr());
         
@@ -29,7 +29,7 @@ impl TcpSegment {
             s_port: trans_bytes::bytes_vec_to_muilt_bytes(&bytes[0..=1]) as u16, d_port: trans_bytes::bytes_vec_to_muilt_bytes(&bytes[2..=3]) as u16,
             seq: trans_bytes::bytes_vec_to_muilt_bytes(&bytes[4..=7]) as u32,
             ack: trans_bytes::bytes_vec_to_muilt_bytes(&bytes[8..=11]) as u32,
-            hl: bytes[12] >> 4, rcvd: bytes[12] & 0x0f, ctrl: bytes[13], win_size: trans_bytes::bytes_vec_to_muilt_bytes(&bytes[14..=15]) as u16,
+            hl: bytes[12] >> 4, rcvd: bytes[12] & 0b0000_1110, ctrl: (((bytes[12] & 1)  as u16) << 8) + (bytes[13] as u16), win_size: trans_bytes::bytes_vec_to_muilt_bytes(&bytes[14..=15]) as u16,
             checksum: trans_bytes::bytes_vec_to_muilt_bytes(&bytes[16..=17]) as u16, ur_ptr: trans_bytes::bytes_vec_to_muilt_bytes(&bytes[18..=19]) as u16,
             options: trans_bytes::bytes_vec_to_muilt_bytes_vec_u32(&bytes[20..h_bytes]),
             data: bytes[h_bytes..].to_vec()
@@ -41,7 +41,7 @@ impl TcpSegment {
             (self.s_port >> 8) as u8, self.s_port as u8, (self.d_port >> 8) as u8, self.d_port as u8, 
             (self.seq >> 24) as u8, (self.seq >> 16) as u8, (self.seq >> 8) as u8, self.seq as u8, 
             (self.ack >> 24) as u8, (self.ack >> 16) as u8, (self.ack >> 8) as u8, self.ack as u8, 
-            ((self.hl << 4) & 0xf0) + (self.rcvd & 0x0f), self.ctrl, (self.win_size >> 8) as u8, self.win_size as u8,
+            ((self.hl << 4) & 0xf0) + ((self.rcvd & 0b0000_0111) << 1) + (((self.ctrl >> 8) & 1)as u8), self.ctrl as u8, (self.win_size >> 8) as u8, self.win_size as u8,
             (self.checksum >> 8) as u8, self.checksum as u8, (self.ur_ptr >> 8) as u8, self.ur_ptr as u8
         ];
         bytes.append(&mut trans_bytes::multi_bytes_vec_to_bytes_vec(&self.options));
@@ -55,12 +55,13 @@ impl TcpSegment {
         
         result
     }
+
 }
 
 
 #[cfg(test)]
 mod tests {
-    use crate::utils::trans_bytes;
+    
     use super::*;
 
     #[test]
@@ -105,7 +106,10 @@ mod tests {
 
         // 验证头部长度
         assert_eq!(serialized[12] >> 4, 5);  
-        assert_eq!(serialized[12] & 0x0f, 0);
+        assert_eq!((serialized[12] >> 1) & 0b0000_0111, 0);
+
+        // 控制字段
+        assert_eq!((((serialized[12] & 1 ) as u16)<< 8) + (serialized[13] as u16), 0x18);
 
         // 验证窗口大小 (0x1000 => 4096)
         assert_eq!(serialized[14], 0x10);
