@@ -2,28 +2,29 @@ use std::collections::BTreeMap;
 
 /**
  * 重组数据流器
+ * 使用绝对偏移
  * 将字节流的子串或者小段按照正确顺序来拼接回连续字节流的模块
  * 如果 ByteStream 已满，则必须暂停装配，将未装配数据暂时保存起来
  * |         assembled_window             |<next_to_be_assembled>             unassembled_window              |
  * |                              buffer_window                                                               |
  * 
  */
-struct StreamReassembler {
-    unassembled_window: BTreeMap<usize, Vec<u8>>,
+pub(crate) struct StreamReassembler {
+    unassembled_buff: BTreeMap<usize, Vec<u8>>,
     assembled_window: Vec<u8>,
     next_to_be_assembled: usize,
-    buffer_window_size: usize,
+    buffer_size: usize,
     eof_idx: usize, // EOF
 }
 
 impl StreamReassembler{
-    pub fn new(buffer_window_size: usize) -> Self {
+    pub fn new(buffer_size: usize) -> Self {
         StreamReassembler {
-            unassembled_window: BTreeMap::new(),
+            unassembled_buff: BTreeMap::new(),
             assembled_window: Vec::new(),
             next_to_be_assembled: 0,
             eof_idx: usize::MAX,
-            buffer_window_size,
+            buffer_size,
         }
     }
 
@@ -40,6 +41,14 @@ impl StreamReassembler{
         let mut result: Vec<u8> = Vec::new();
         result.append(&mut self.assembled_window); // 清空assembled_window
         result
+    }
+
+    pub fn assembled_cnt(&self) -> u64 {
+        self.next_to_be_assembled as u64
+    }
+
+    pub fn unassembled_window_size(&self) -> u32 {
+        (self.buffer_size - self.assembled_window.len()) as u32
     }
 
     /**
@@ -80,7 +89,7 @@ impl StreamReassembler{
             被删除: 所有满足l在 (..,self.next_to_be_assembled]
             被删除但不被合并：满足l在 (..,self.next_to_be_assembled）, r 在 (..,self.next_to_be_assembled]
         */
-        for (k, v) in self.unassembled_window.range(..=self.next_to_be_assembled) {
+        for (k, v) in self.unassembled_buff.range(..=self.next_to_be_assembled) {
             if k + v.len() > self.next_to_be_assembled { // 只可能最多有一个
                 self.assembled_window.extend_from_slice(&v[(self.next_to_be_assembled - k)..]);
                 self.next_to_be_assembled = k + v.len();
@@ -92,6 +101,7 @@ impl StreamReassembler{
             self.rm_from_unassembled_buff(key);
         }
     }
+
     /**
      * 处理区间合并
      */
@@ -111,7 +121,7 @@ impl StreamReassembler{
             l 在 [m_r, next_idx_from_data]:
                 合并, r在 (next_idx_from_data, ..)
         */
-        for (k, v) in self.unassembled_window.range(..offset) {
+        for (k, v) in self.unassembled_buff.range(..offset) {
             if k + v.len() >= offset { // 至多有一个
                 merged.extend_from_slice(&v);
                 merged_st = *k;
@@ -122,7 +132,7 @@ impl StreamReassembler{
         }
         // 若合并后的窗口右侧大于data的右侧, 则不可能存在右边可以与之合并的
         if merged_st + merged.len() <= next_idx_from_data {
-            for (k, v) in self.unassembled_window.range((merged_st + merged.len())..=next_idx_from_data) {
+            for (k, v) in self.unassembled_buff.range((merged_st + merged.len())..=next_idx_from_data) {
                 if k + v.len() > next_idx_from_data { // 至多有一个
                     merged.extend_from_slice(&v[(next_idx_from_data - k)..]);
                 }
@@ -142,17 +152,19 @@ impl StreamReassembler{
         
     }
 
+
     fn rm_from_unassembled_buff(&mut self, key: usize) {
-        self.unassembled_window.remove(&key);
+        self.unassembled_buff.remove(&key);
     }
 
     fn add_to_unassembled_buff(&mut self, key: usize, val: &[u8]) {
-        self.unassembled_window.insert(key, val.to_vec());
+        self.unassembled_buff.insert(key, val.to_vec());
     }
 
     fn beyond_window(&self, last_idx: usize) -> bool {
-        last_idx > self.buffer_window_size - self.assembled_window.len() + self.next_to_be_assembled - 1
+        last_idx > self.buffer_size - self.assembled_window.len() + self.next_to_be_assembled - 1
     }
+
 
 }
 

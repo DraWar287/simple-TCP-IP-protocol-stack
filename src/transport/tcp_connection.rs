@@ -1,4 +1,4 @@
-use super::tcp;
+use super::tcp_segment;
 
 struct TcpConnection {
     s_ip: u32,
@@ -30,17 +30,3 @@ impl TcpConnection {
 
 }
 
-/**
- * 用以接收传入的 TCP segment 并将其转换成用户可读的数据流
- * 告诉发送者ack number, window size, 
- */
-struct TcpReceiver{
-    initial_seq: u32,
-    syn_flag: bool,
-    capacity: u16,
-    
-}
-
-impl TcpReceiver {
-    
-}

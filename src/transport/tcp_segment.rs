@@ -1,18 +1,39 @@
 use crate::utils::checksum;
 use crate::utils::trans_bytes;
 
+macro_rules! generate_check_ctrl {
+    ($tag_name: ident) => {
+        pub fn $tag_name(&self) -> bool {
+            self.ctrl & (TcpCtrlFlag::$tag_name as u16) != 0
+        }
+    };
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum TcpCtrlFlag {
+    URG = 0b000000001,  // 位 0
+    ACK = 0b000000010,  // 位 1
+    PSH = 0b000000100,  // 位 2
+    RST = 0b000001000,  // 位 3
+    SYN = 0b000010000,  // 位 4
+    FIN = 0b000100000,  // 位 5
+    ECE = 0b001000000,  // 位 6
+    CWR = 0b010000000,  // 位 7
+    NS  = 0b100000000,  // 位 8
+}
+
 /**
  * TCP报文段
  */
 #[derive(Debug)]
 pub struct TcpSegment {
-    s_port: u16, d_port: u16,
-    seq: u32,
-    ack: u32,
-    hl: u8/* 长度4bits, 单位32bits*/, rcvd: u8/* 长度3bits*/, ctrl: u16, win_size: u16,
-    checksum: u16, ur_ptr: u16,
-    options: Vec<u32>,
-    data: Vec<u8> 
+    pub s_port: u16, pub d_port: u16,
+    pub seq: u32,
+    pub ack: u32,
+    pub hl: u8/* 长度4bits, 单位32bits*/, pub rcvd: u8/* 长度3bits*/, pub ctrl: u16, pub win_size: u16,
+    checksum: u16, pub ur_ptr: u16,
+    pub options: Vec<u32>,
+    pub data: Vec<u8> 
 }
 
 impl TcpSegment {
@@ -56,8 +77,29 @@ impl TcpSegment {
         result
     }
 
-}
+    pub fn update_ctrl(&mut self, flag: &TcpCtrlFlag, valid: bool) {
+        if valid {
+            self.ctrl = self.ctrl | (*flag as u16);
+        }
+        else {
+            self.ctrl = self.ctrl & (!(*flag as u16));
+        }
+    }
 
+    // 生成对应的检查方法
+    generate_check_ctrl!(URG);
+    generate_check_ctrl!(ACK);
+    generate_check_ctrl!(PSH);
+    generate_check_ctrl!(RST);
+    generate_check_ctrl!(SYN);
+    generate_check_ctrl!(FIN);
+    generate_check_ctrl!(ECE);
+    generate_check_ctrl!(CWR);
+    generate_check_ctrl!(NS);
+    
+
+
+}
 
 
 
@@ -69,14 +111,14 @@ mod tests {
     #[test]
     fn test_serialize() {
         // 先定义一个 TcpSegment 实例
-        let segment = TcpSegment::new(
+        let mut segment = TcpSegment::new(
             12345,          // 源端口
             80,             // 目标端口
             1001,           // 序列号
             2002,           // 确认号
             5,              // 头部长度 (HL)
             0,              // 保留字段 (RCVD)
-            0x18,           // 控制位 (比如 SYN + ACK)
+            0x12,           // 控制位 (比如 SYN + ACK)
             4096,           // 窗口大小
             0,              // 紧急指针
             vec![],     // 假设选项字段为空
@@ -111,8 +153,11 @@ mod tests {
         assert_eq!((serialized[12] >> 1) & 0b0000_0111, 0);
 
         // 控制字段
-        assert_eq!((((serialized[12] & 1 ) as u16)<< 8) + (serialized[13] as u16), 0x18);
-
+        assert_eq!((((serialized[12] & 1 ) as u16)<< 8) + (serialized[13] as u16), 0x12);
+        assert!(segment.SYN());
+        segment.update_ctrl(&TcpCtrlFlag::SYN, false);
+        assert!(!segment.SYN());
+        segment.update_ctrl(&TcpCtrlFlag::SYN, true);
         // 验证窗口大小 (0x1000 => 4096)
         assert_eq!(serialized[14], 0x10);
         assert_eq!(serialized[15], 0x00);
